@@ -114,6 +114,12 @@ impl Token {
         e.storage().instance().set(&k, &c);
     }
 
+    pub fn clear(e: Env) {
+        let k = DataKey::Helper;
+        let c: Vec<Address> = Vec::new(&e);
+        e.storage().instance().set(&k, &c);
+    }
+
     pub fn is_helpful(e: Env, a: Address) -> bool {
         let k = DataKey::Helper;
         let r = e.storage().instance().get::<_, Vec<Address>>(&k);
