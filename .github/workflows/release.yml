@@ -1,7 +1,7 @@
 name: Release Contract
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
 permissions:  # required permissions for the workflow
   id-token: write
   contents: write
