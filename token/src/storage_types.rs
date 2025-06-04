@@ -26,5 +26,6 @@ pub enum DataKey {
     Allowance(AllowanceDataKey),
     Balance(Address),
     State(Address),
+    Helper,
     Admin,
 }
