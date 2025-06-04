@@ -1,18 +1,53 @@
-name: Release Contract
+name: Build and Deploy
 on:
   push:
-    branches: [ main ]
-permissions:  # required permissions for the workflow
+
+permissions:
   id-token: write
   contents: write
   attestations: write
+
 jobs:
-  release-farkle:
-    uses: stellar-expert/soroban-build-workflow/.github/workflows/release.yml@main
-    with:
-      release_name: ${{ github.ref_name }}
-      release_description: 'Helpful Contract Release'
-      relative_path: 'contract'
-      package: 'dnwp'
-    secrets:
-      release_token: ${{ secrets.GITHUB_TOKEN }}
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - run: rustup update
+    - run: rustup target add wasm32v1-none
+
+    - uses: stellar/stellar-cli@v22.8.1
+    - run: cd token && stellar contract build --meta source_repo=github:${{ github.repository }}
+
+
+    - name: Attestation
+      uses: actions/attest-build-provenance@v1
+      id: attestation
+      with:
+        subject-name: token-contract
+        subject-path: target/wasm32v1-none/release/token.wasm
+
+    - name: Display Attestation Info
+      run: |
+        echo "Attestation created successfully!"
+        echo "Check the Actions run summary for attestation details"
+
+    - name: Upload to Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: token.wasm
+        path: target/wasm32v1-none/release/token.wasm
+
+    - name: Setup CLI for Testnet
+      run: stellar network use testnet
+
+    - name: Setup CLI with Deployer
+      run: |
+        stellar keys generate deployer --fund
+        stellar keys use deployer
+
+
+    - name: Install Contract with WASM Hash to TestNet (Verifiable)
+      run: |
+        WASM_HASH=$(stellar contract install --wasm target/wasm32v1-none/release/token.wasm)
+        echo "Contract installed with WASM hash: $WASM_HASH"

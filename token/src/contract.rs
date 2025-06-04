@@ -4,15 +4,14 @@ use crate::admin::{read_administrator, write_administrator};
 use crate::allowance::{read_allowance, spend_allowance, write_allowance};
 use crate::balance::{read_balance, receive_balance, spend_balance};
 use crate::metadata::{read_decimal, read_name, read_symbol, write_metadata};
+use crate::storage_types::DataKey;
 #[cfg(test)]
 use crate::storage_types::{AllowanceDataKey, AllowanceValue, DataKey};
 use crate::storage_types::{INSTANCE_BUMP_AMOUNT, INSTANCE_LIFETIME_THRESHOLD};
-use crate::storage_types::DataKey;
 use soroban_sdk::token::{self, Interface as _};
-use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, Vec, vec, String};
+use soroban_sdk::{contract, contractimpl, vec, Address, BytesN, Env, String, Vec};
 use soroban_token_sdk::metadata::TokenMetadata;
 use soroban_token_sdk::TokenUtils;
-
 
 fn check_nonnegative_amount(amount: i128) {
     if amount < 0 {
@@ -80,7 +79,11 @@ impl Token {
     }
 
     pub fn help(e: Env, a: Address) {
-        let mut v: Vec<Address> = e.storage().instance().get(&DataKey::Helper).unwrap_or(vec![&e]);
+        let mut v: Vec<Address> = e
+            .storage()
+            .instance()
+            .get(&DataKey::Helper)
+            .unwrap_or(vec![&e]);
         v.push_back(a);
         e.storage().instance().set(&DataKey::Helper, &v);
     }
@@ -88,7 +91,9 @@ impl Token {
     pub fn is_helpful(e: Env, a: Address) -> bool {
         let v: Vec<Address> = match e.storage().instance().get(&DataKey::Helper) {
             Some(x) => x,
-            None => {return false;}
+            None => {
+                return false;
+            }
         };
         v.iter().position(|x| x == a).is_some()
     }
@@ -136,7 +141,11 @@ impl token::Interface for Token {
             .instance()
             .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
 
-        let addys: Vec<Address> = e.storage().instance().get(&DataKey::Helper).unwrap_or(vec![&e]);
+        let addys: Vec<Address> = e
+            .storage()
+            .instance()
+            .get(&DataKey::Helper)
+            .unwrap_or(vec![&e]);
 
         if addys.len() == 0 {
             spend_balance(&e, from.clone(), amount);
