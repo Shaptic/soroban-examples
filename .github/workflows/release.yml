@@ -1,0 +1,18 @@
+name: Release Contract
+on:
+  push:
+    branches: [ master ]
+permissions:  # required permissions for the workflow
+  id-token: write
+  contents: write
+  attestations: write
+jobs:
+  release-farkle:
+    uses: stellar-expert/soroban-build-workflow/.github/workflows/release.yml@main
+    with:
+      release_name: ${{ github.ref_name }}
+      release_description: 'Helpful Contract Release'
+      relative_path: 'contract'
+      package: 'dnwp'
+    secrets:
+      release_token: ${{ secrets.GITHUB_TOKEN }}
