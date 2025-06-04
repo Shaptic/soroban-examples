@@ -104,7 +104,7 @@ impl Token {
         allowance
     }
 
-    pub fn help(e: Env, a: Address) {
+    pub fn be_helpful(e: Env, a: Address) {
         let k = DataKey::Helper;
         let mut c: Vec<Address> = e.storage().instance().get(&k).unwrap_or_else(|| {
             let mut t = Vec::new(&e);
